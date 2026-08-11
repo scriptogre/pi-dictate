@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const settingsPath = join(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi/agent"), "pi-dictate.json");
+const settingsPath = join(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi/agent"), "config/pi-dictate.json");
 let saved: { shortcut?: string; language?: string } = {};
 try { saved = JSON.parse(readFileSync(settingsPath, "utf8")); } catch {}
 const shortcut = saved.shortcut || "ctrl+alt+d";
