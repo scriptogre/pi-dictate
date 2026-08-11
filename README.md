@@ -1,6 +1,6 @@
 # pi-dictate
 
-Lightweight Deepgram push-to-talk dictation for Pi on macOS.
+Dictate into Pi with Deepgram.
 
 ## Install
 
