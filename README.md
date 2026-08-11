@@ -13,6 +13,8 @@ pi install git:github.com/scriptogre/pi-dictate
 
 Restart Pi and add your Deepgram API key:
 
+New accounts include [$200 in credit](https://deepgram.com/pricing). [Create an account](https://console.deepgram.com/signup).
+
 ```text
 /login deepgram
 ```
