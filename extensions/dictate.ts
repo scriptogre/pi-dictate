@@ -13,6 +13,7 @@ const shortcut = config.shortcut || "ctrl+alt+d";
 const language = config.language || "en";
 const bareKey = (key: string) => key.replace(/^(?:(?:ctrl|shift|alt|super|meta|cmd)\+)+/, "");
 const keyName = bareKey(shortcut);
+const cursorMarker = "\u2060";
 
 export default function (pi: ExtensionAPI) {
 	pi.registerProvider(createProvider({
@@ -27,6 +28,7 @@ export default function (pi: ExtensionAPI) {
 	let audio: Buffer[] = [];
 	let finals: string[] = [];
 	let editorBefore = "";
+	let editorAfter = "";
 	let started = 0;
 	let pressed = false;
 	let statusTimer: ReturnType<typeof setInterval> | undefined;
@@ -55,7 +57,9 @@ export default function (pi: ExtensionAPI) {
 		mic = socket = undefined;
 		audio = [];
 		finals = [];
+		if (ctx?.ui.getEditorText().includes(cursorMarker)) ctx.ui.setEditorText(editorBefore + editorAfter);
 		editorBefore = "";
+		editorAfter = "";
 		ws?.close();
 		if (error) ctx?.ui.notify(error, "error");
 	}
@@ -78,7 +82,6 @@ export default function (pi: ExtensionAPI) {
 			model: "nova-3", language, encoding: "linear16", sample_rate: "16000",
 			channels: "1", smart_format: "true", interim_results: "true",
 		});
-		editorBefore = ctx.ui.getEditorText().trim();
 		finals = [];
 		const ws = socket = new WebSocket(`wss://api.deepgram.com/v1/listen?${query}`, {
 			headers: { Authorization: `Token ${key}` },
@@ -88,7 +91,7 @@ export default function (pi: ExtensionAPI) {
 			const message = JSON.parse(String(event.data));
 			const text = message.channel?.alternatives?.[0]?.transcript?.trim() || "";
 			if (message.is_final && text) finals.push(text);
-			ctx?.ui.setEditorText([editorBefore, ...finals, message.is_final ? "" : text].filter(Boolean).join(" "));
+			ctx?.ui.setEditorText(editorBefore + [...finals, message.is_final ? "" : text].filter(Boolean).join(" ") + editorAfter);
 		};
 		ws.onerror = () => { if (socket === ws) finish("Deepgram connection failed"); };
 		ws.onclose = () => { if (socket === ws) finish(); };
@@ -117,6 +120,8 @@ export default function (pi: ExtensionAPI) {
 			if (pressed || socket) return;
 			ctx = handlerCtx;
 			pressed = true;
+			ctx.ui.pasteToEditor(cursorMarker);
+			[editorBefore, editorAfter = ""] = ctx.ui.getEditorText().split(cursorMarker);
 			started = Date.now();
 			statusTimer = setInterval(status, 100);
 			status();

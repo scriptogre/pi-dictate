@@ -46,7 +46,8 @@ describe("dictation", () => {
 		const events = new Map<string, Function>();
 		let shortcut: any;
 		let terminalInput: Function | undefined;
-		let editor = "existing";
+		let editor = "before\n\n\nafter";
+		let cursor = "before\n\n".length;
 		const pi = {
 			registerProvider: mock(),
 			registerShortcut: (_key: string, value: unknown) => { shortcut = value; },
@@ -59,6 +60,7 @@ describe("dictation", () => {
 				theme: { fg: (_color: string, text: string) => text },
 				onTerminalInput: (handler: Function) => { terminalInput = handler; return () => {}; },
 				setStatus: mock(), notify: mock(),
+				pasteToEditor: (text: string) => { editor = editor.slice(0, cursor) + text + editor.slice(cursor); cursor += text.length; },
 				getEditorText: () => editor,
 				setEditorText: (value: string) => { editor = value; },
 			},
@@ -76,9 +78,9 @@ describe("dictation", () => {
 		socket.open();
 		expect(socket.sent).toContainEqual(Buffer.from([1, 2]));
 		socket.onmessage?.({ data: JSON.stringify({ is_final: false, channel: { alternatives: [{ transcript: "hello" }] } }) });
-		expect(editor).toBe("existing hello");
+		expect(editor).toBe("before\n\nhello\nafter");
 		socket.onmessage?.({ data: JSON.stringify({ is_final: true, channel: { alternatives: [{ transcript: "hello world" }] } }) });
-		expect(editor).toBe("existing hello world");
+		expect(editor).toBe("before\n\nhello world\nafter");
 
 		terminalInput?.("\x1b[100;7:3u");
 		await new Promise(resolve => setTimeout(resolve, 0));
@@ -86,6 +88,6 @@ describe("dictation", () => {
 		expect(socket.sent).toContain(JSON.stringify({ type: "CloseStream" }));
 		expect(ctx.ui.setStatus).toHaveBeenCalledWith("dictate", undefined);
 		socket.onclose?.();
-		expect(editor).toBe("existing hello world");
+		expect(editor).toBe("before\n\nhello world\nafter");
 	});
 });
