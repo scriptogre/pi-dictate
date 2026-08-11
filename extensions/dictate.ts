@@ -38,7 +38,9 @@ export default function (pi: ExtensionAPI) {
 	let operation = Promise.resolve();
 
 	const queue = (fn: () => Promise<void>) => { operation = operation.then(fn, fn).catch(error => finish(String(error instanceof Error ? error.message : error))); };
-	const setStatus = () => ctx?.ui.setStatus("dictate", keyDown ? `● REC ${((Date.now() - started) / 1000).toFixed(1)}s` : undefined);
+	const setStatus = () => ctx?.ui.setStatus("dictate", keyDown
+		? ctx.ui.theme.fg("error", "●") + ctx.ui.theme.fg("muted", ` REC ${((Date.now() - started) / 1000).toFixed(1)}s`)
+		: undefined);
 	const clearRelease = () => { if (releaseTimer) clearTimeout(releaseTimer); releaseTimer = undefined; };
 	const updateEditor = () => ctx?.ui.setEditorText([editorBefore, transcript, interim].filter(Boolean).join(" "));
 

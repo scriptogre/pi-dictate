@@ -56,6 +56,7 @@ describe("dictation", () => {
 		const ctx = {
 			modelRegistry: { getProviderAuth: async () => ({ auth: { apiKey: "test-key" } }) },
 			ui: {
+				theme: { fg: (_color: string, text: string) => text },
 				onTerminalInput: (handler: Function) => { terminalInput = handler; return () => {}; },
 				setStatus: mock(), notify: mock(),
 				getEditorText: () => editor,
