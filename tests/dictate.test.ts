@@ -65,6 +65,7 @@ describe("dictation", () => {
 		events.get("session_start")?.({}, ctx);
 		shortcut.handler(ctx);
 		expect(ctx.ui.setStatus).toHaveBeenCalledWith("dictate", "● REC 0.0s");
+		microphone.stdout.emit("data", Buffer.from([1, 2]));
 		await new Promise(resolve => setTimeout(resolve, 0));
 
 		const socket = sockets[0]!;
@@ -72,7 +73,6 @@ describe("dictation", () => {
 		expect(socket.url).toContain("language=en");
 		expect(socket.url).toContain("interim_results=true");
 		socket.open();
-		microphone.stdout.emit("data", Buffer.from([1, 2]));
 		expect(socket.sent).toContainEqual(Buffer.from([1, 2]));
 		socket.onmessage?.({ data: JSON.stringify({ is_final: false, channel: { alternatives: [{ transcript: "hello" }] } }) });
 		expect(editor).toBe("existing hello");

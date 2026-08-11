@@ -26,6 +26,7 @@ export default function (pi: ExtensionAPI) {
 	let ctx: ExtensionContext | undefined;
 	let mic: ChildProcess | undefined;
 	let socket: WebSocket | undefined;
+	let pendingAudio: Buffer[] = [];
 	let transcript = "";
 	let interim = "";
 	let editorBefore = "";
@@ -36,8 +37,7 @@ export default function (pi: ExtensionAPI) {
 	let unsubscribe: (() => void) | undefined;
 	let operation = Promise.resolve();
 
-	const queue = (fn: () => Promise<void>) => { operation = operation.then(fn, fn).catch(notifyError); };
-	const notifyError = (error: unknown) => ctx?.ui.notify(String(error instanceof Error ? error.message : error), "error");
+	const queue = (fn: () => Promise<void>) => { operation = operation.then(fn, fn).catch(error => finish(String(error instanceof Error ? error.message : error))); };
 	const setStatus = () => ctx?.ui.setStatus("dictate", keyDown ? `● REC ${((Date.now() - started) / 1000).toFixed(1)}s` : undefined);
 	const clearRelease = () => { if (releaseTimer) clearTimeout(releaseTimer); releaseTimer = undefined; };
 	const updateEditor = () => ctx?.ui.setEditorText([editorBefore, transcript, interim].filter(Boolean).join(" "));
@@ -47,6 +47,7 @@ export default function (pi: ExtensionAPI) {
 		statusTimer = undefined;
 		mic?.kill("SIGKILL");
 		mic = undefined;
+		pendingAudio = [];
 		socket?.close();
 		socket = undefined;
 		setStatus();
@@ -67,15 +68,12 @@ export default function (pi: ExtensionAPI) {
 		transcript = "";
 		interim = "";
 		editorBefore = ctx.ui.getEditorText().trim();
-		mic = spawn("ffmpeg", [
-			"-f", "avfoundation", "-i", ":default", "-ac", "1", "-ar", "16000",
-			"-sample_fmt", "s16", "-f", "s16le", "-loglevel", "error", "pipe:1",
-		], { stdio: ["ignore", "pipe", "ignore"] });
 		const ws = socket = new WebSocket(`wss://api.deepgram.com/v1/listen?${params}`, {
 			headers: { Authorization: `Token ${key}` },
 		} as any);
 		ws.onopen = () => {
-			mic?.stdout?.on("data", chunk => { if (ws.readyState === WebSocket.OPEN) ws.send(chunk); });
+			for (const chunk of pendingAudio) ws.send(chunk);
+			pendingAudio = [];
 		};
 		ws.onmessage = event => {
 			const message = JSON.parse(String(event.data));
@@ -88,11 +86,23 @@ export default function (pi: ExtensionAPI) {
 		};
 		ws.onerror = () => finish("Deepgram connection failed");
 		ws.onclose = () => finish();
+	}
+
+	function capture() {
+		pendingAudio = [];
+		mic = spawn("ffmpeg", [
+			"-f", "avfoundation", "-i", ":default", "-ac", "1", "-ar", "16000",
+			"-sample_fmt", "s16", "-f", "s16le", "-loglevel", "error", "pipe:1",
+		], { stdio: ["ignore", "pipe", "ignore"] });
+		mic.stdout?.on("data", chunk => {
+			if (socket?.readyState === WebSocket.OPEN) socket.send(chunk);
+			else pendingAudio.push(chunk);
+		});
 		mic.on("error", error => finish(`Microphone failed: ${error.message}`));
 	}
 
 	async function stop() {
-		if (!socket) return;
+		if (!socket) return finish();
 		const ws = socket;
 		if (statusTimer) clearInterval(statusTimer);
 		statusTimer = undefined;
@@ -126,6 +136,7 @@ export default function (pi: ExtensionAPI) {
 			started = Date.now();
 			statusTimer = setInterval(setStatus, 100);
 			setStatus();
+			capture();
 			armRelease(650);
 			queue(start);
 		},
