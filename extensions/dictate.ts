@@ -72,12 +72,15 @@ export default function (pi: ExtensionAPI) {
 		], { stdio: ["ignore", "pipe", "ignore"] });
 		mic.stdout?.on("data", chunk => socket?.readyState === WebSocket.OPEN ? socket.send(chunk) : audio.push(chunk));
 		mic.on("error", error => finish(`Microphone failed: ${error.message}`));
+		const child = mic;
+		mic.on("exit", code => { if (mic === child && pressed) finish(`Microphone stopped${code ? ` (${code})` : ""}`); });
 	}
 
 	async function connect() {
 		if (!ctx) return;
 		const key = (await ctx.modelRegistry.getProviderAuth("deepgram"))?.auth.apiKey;
 		if (!key) throw new Error("Run /login deepgram first");
+		if (!mic) return;
 		const query = new URLSearchParams({
 			model: "nova-3", language, encoding: "linear16", sample_rate: "16000",
 			channels: "1", smart_format: "true", interim_results: "true",
@@ -86,9 +89,11 @@ export default function (pi: ExtensionAPI) {
 		const ws = socket = new WebSocket(`wss://api.deepgram.com/v1/listen?${query}`, {
 			headers: { Authorization: `Token ${key}` },
 		} as any);
+		setTimeout(() => { if (socket === ws && ws.readyState !== WebSocket.OPEN) finish("Deepgram connection timed out"); }, 10_000).unref();
 		ws.onopen = () => { for (const chunk of audio) ws.send(chunk); audio = []; };
 		ws.onmessage = event => {
 			const message = JSON.parse(String(event.data));
+			if (message.type === "Error") return finish(message.message || "Deepgram error");
 			const text = message.channel?.alternatives?.[0]?.transcript?.trim() || "";
 			if (message.is_final && text) finals.push(text);
 			ctx?.ui.setEditorText(editorBefore + [...finals, message.is_final ? "" : text].filter(Boolean).join(" ") + editorAfter);

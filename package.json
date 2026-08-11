@@ -2,7 +2,10 @@
   "name": "pi-dictate",
   "version": "0.1.0",
   "description": "Minimal Deepgram push-to-talk dictation for Pi",
+  "repository": "github:scriptogre/pi-dictate",
+  "homepage": "https://github.com/scriptogre/pi-dictate#readme",
   "type": "module",
+  "files": ["extensions", "README.md", "LICENSE"],
   "keywords": ["pi-package", "pi-extension", "dictation", "deepgram"],
   "license": "MIT",
   "scripts": {

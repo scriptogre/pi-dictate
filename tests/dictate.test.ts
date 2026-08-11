@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 class Emitter {
 	handlers = new Map<string, Function[]>();
@@ -13,10 +16,7 @@ class Emitter {
 
 let microphone: Emitter & { stdout: Emitter; kill: ReturnType<typeof mock> };
 const childProcess = await import("node:child_process");
-mock.module("node:child_process", () => ({
-	...childProcess,
-	spawn: () => microphone,
-}));
+mock.module("node:child_process", () => ({ ...childProcess, spawn: () => microphone }));
 
 const sockets: FakeSocket[] = [];
 class FakeSocket {
@@ -34,42 +34,57 @@ class FakeSocket {
 }
 globalThis.WebSocket = FakeSocket as any;
 
+const agentDir = mkdtempSync(join(tmpdir(), "pi-dictate-"));
+const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+process.env.PI_CODING_AGENT_DIR = agentDir;
 const { default: dictate } = await import("../extensions/dictate");
+afterAll(() => {
+	if (previousAgentDir) process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+	else delete process.env.PI_CODING_AGENT_DIR;
+	rmSync(agentDir, { recursive: true });
+});
 
 beforeEach(() => {
 	sockets.length = 0;
 	microphone = Object.assign(new Emitter(), { stdout: new Emitter(), kill: mock() });
 });
 
+function setup(auth: unknown = { auth: { apiKey: "test-key" } }) {
+	const events = new Map<string, Function>();
+	let shortcut: any;
+	let terminalInput: Function | undefined;
+	let editor = "before\n\n\nafter";
+	let cursor = "before\n\n".length;
+	const pi = {
+		registerProvider: mock(),
+		registerShortcut: (_key: string, value: unknown) => { shortcut = value; },
+		on: (name: string, handler: Function) => events.set(name, handler),
+	};
+	const ctx = {
+		modelRegistry: { getProviderAuth: async () => auth },
+		ui: {
+			theme: { fg: (_color: string, text: string) => text },
+			onTerminalInput: (handler: Function) => { terminalInput = handler; return () => {}; },
+			setStatus: mock(), notify: mock(),
+			pasteToEditor: (text: string) => { editor = editor.slice(0, cursor) + text + editor.slice(cursor); cursor += text.length; },
+			getEditorText: () => editor,
+			setEditorText: (value: string) => { editor = value; },
+		},
+	};
+	dictate(pi as any);
+	events.get("session_start")?.({}, ctx);
+	return { ctx, pi, shortcut, input: (data: string) => terminalInput?.(data), editor: () => editor };
+}
+
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
 describe("dictation", () => {
-	test("streams audio and inserts the final transcript on release", async () => {
-		const events = new Map<string, Function>();
-		let shortcut: any;
-		let terminalInput: Function | undefined;
-		let editor = "before\n\n\nafter";
-		let cursor = "before\n\n".length;
-		const pi = {
-			registerProvider: mock(),
-			registerShortcut: (_key: string, value: unknown) => { shortcut = value; },
-			on: (name: string, handler: Function) => events.set(name, handler),
-		};
-		dictate(pi as any);
-		const ctx = {
-			modelRegistry: { getProviderAuth: async () => ({ auth: { apiKey: "test-key" } }) },
-			ui: {
-				theme: { fg: (_color: string, text: string) => text },
-				onTerminalInput: (handler: Function) => { terminalInput = handler; return () => {}; },
-				setStatus: mock(), notify: mock(),
-				pasteToEditor: (text: string) => { editor = editor.slice(0, cursor) + text + editor.slice(cursor); cursor += text.length; },
-				getEditorText: () => editor,
-				setEditorText: (value: string) => { editor = value; },
-			},
-		};
-		events.get("session_start")?.({}, ctx);
-		shortcut.handler(ctx);
-		expect(ctx.ui.setStatus).toHaveBeenCalledWith("dictate", "● REC 0.0s");
+	test("buffers audio, streams at the cursor, and finalizes after release", async () => {
+		const app = setup();
+		app.shortcut.handler(app.ctx);
+		expect(app.ctx.ui.setStatus).toHaveBeenCalledWith("dictate", "● REC 0.0s");
 		microphone.stdout.emit("data", Buffer.from([1, 2]));
-		await new Promise(resolve => setTimeout(resolve, 0));
+		await settle();
 
 		const socket = sockets[0]!;
 		expect(socket.url).toContain("model=nova-3");
@@ -78,16 +93,42 @@ describe("dictation", () => {
 		socket.open();
 		expect(socket.sent).toContainEqual(Buffer.from([1, 2]));
 		socket.onmessage?.({ data: JSON.stringify({ is_final: false, channel: { alternatives: [{ transcript: "hello" }] } }) });
-		expect(editor).toBe("before\n\nhello\nafter");
-		socket.onmessage?.({ data: JSON.stringify({ is_final: true, channel: { alternatives: [{ transcript: "hello world" }] } }) });
-		expect(editor).toBe("before\n\nhello world\nafter");
+		expect(app.editor()).toBe("before\n\nhello\nafter");
 
-		terminalInput?.("\x1b[100;7:3u");
-		await new Promise(resolve => setTimeout(resolve, 0));
+		app.input("\x1b[100;7:3u");
+		await settle();
 		expect(microphone.kill).toHaveBeenCalledWith("SIGTERM");
 		expect(socket.sent).toContain(JSON.stringify({ type: "CloseStream" }));
-		expect(ctx.ui.setStatus).toHaveBeenCalledWith("dictate", undefined);
+		socket.onmessage?.({ data: JSON.stringify({ is_final: true, channel: { alternatives: [{ transcript: "hello world" }] } }) });
 		socket.onclose?.();
-		expect(editor).toBe("before\n\nhello world\nafter");
+		expect(app.editor()).toBe("before\n\nhello world\nafter");
+	});
+
+	test("cleans up when auth is missing", async () => {
+		const app = setup(null);
+		app.shortcut.handler(app.ctx);
+		await settle();
+		expect(microphone.kill).toHaveBeenCalledWith("SIGKILL");
+		expect(app.ctx.ui.notify).toHaveBeenCalledWith("Run /login deepgram first", "error");
+		expect(app.editor()).toBe("before\n\n\nafter");
+	});
+
+	test("reports a microphone that exits while recording", async () => {
+		const app = setup();
+		app.shortcut.handler(app.ctx);
+		microphone.emit("exit", 1);
+		await settle();
+		expect(app.ctx.ui.notify).toHaveBeenCalledWith("Microphone stopped (1)", "error");
+		expect(sockets).toHaveLength(0);
+	});
+
+	test("cleans up a Deepgram protocol error", async () => {
+		const app = setup();
+		app.shortcut.handler(app.ctx);
+		await settle();
+		sockets[0]!.onmessage?.({ data: JSON.stringify({ type: "Error", message: "Bad request" }) });
+		expect(app.ctx.ui.notify).toHaveBeenCalledWith("Bad request", "error");
+		expect(microphone.kill).toHaveBeenCalledWith("SIGKILL");
+		expect(app.editor()).toBe("before\n\n\nafter");
 	});
 });
