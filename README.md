@@ -25,7 +25,7 @@ Hold `Ctrl+Alt+D` while speaking. Words appear in Pi's editor as you talk.
 
 ## Change the shortcut or language
 
-Create `~/.pi/agent/config/pi-dictate.json`, then restart Pi:
+Create `~/.pi/agent/pi-dictate.json`, then restart Pi:
 
 ```json
 {
