@@ -2,18 +2,23 @@
 
 Lightweight Deepgram push-to-talk dictation for Pi on macOS.
 
-## Install
-
-Install `ffmpeg`, then install the Pi package:
+## Install ffmpeg
 
 ```sh
 brew install ffmpeg
+```
+
+## Install pi-dictate
+
+```sh
 pi install git:github.com/scriptogre/pi-dictate
 ```
 
-Restart Pi and add your Deepgram API key:
+## Add your Deepgram API key
 
 New accounts include [$200 in credit](https://deepgram.com/pricing). [Create an account](https://console.deepgram.com/signup).
+
+Restart Pi, then run:
 
 ```text
 /login deepgram
