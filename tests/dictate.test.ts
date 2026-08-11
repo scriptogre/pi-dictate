@@ -78,6 +78,7 @@ describe("dictation", () => {
 		await new Promise(resolve => setTimeout(resolve, 0));
 		expect(microphone.kill).toHaveBeenCalledWith("SIGTERM");
 		expect(socket.sent).toContain(JSON.stringify({ type: "CloseStream" }));
+		expect(ctx.ui.setStatus).toHaveBeenCalledWith("dictate", undefined);
 		socket.onclose?.();
 		expect(editor).toBe("existing hello world");
 	});

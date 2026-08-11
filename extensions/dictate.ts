@@ -90,6 +90,9 @@ export default function (pi: ExtensionAPI) {
 	async function stop() {
 		if (!socket) return;
 		const ws = socket;
+		if (statusTimer) clearInterval(statusTimer);
+		statusTimer = undefined;
+		ctx?.ui.setStatus("dictate", undefined);
 		mic?.kill("SIGTERM");
 		if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "CloseStream" }));
 		setTimeout(() => { if (socket === ws) ws.close(); }, 2500).unref();
