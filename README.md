@@ -28,11 +28,13 @@ Pi stores the key through its standard credential flow. Allow microphone access 
 
 ## Dictate
 
-Hold `Ctrl+Alt+D` while speaking. Words appear in Pi's editor as you talk.
+Hold `Ctrl+Alt+D` while speaking.
 
-## Change the shortcut or language
+Your words appear in Pi's editor as you talk.
 
-Create `~/.pi/agent/pi-dictate.json`, then restart Pi:
+## Configure
+
+Create `~/.pi/agent/pi-dictate.json`, then restart Pi.
 
 ```json
 {
@@ -41,6 +43,8 @@ Create `~/.pi/agent/pi-dictate.json`, then restart Pi:
 }
 ```
 
-## Why pi-dictate?
+## Need more voice features?
 
-[pi-listen](https://github.com/codexstar69/pi-listen) supports a broader set of voice features. pi-dictate is a much smaller option for people who only need Deepgram push-to-talk.
+[pi-listen](https://github.com/codexstar69/pi-listen) supports a broader set of voice features.
+
+pi-dictate stays focused on Deepgram push-to-talk.
