@@ -1,28 +1,39 @@
 # pi-dictate
 
-Minimal Deepgram push-to-talk dictation for Pi on macOS.
+Lightweight Deepgram push-to-talk dictation for Pi on macOS.
 
-## Setup
+## Install
+
+Install `ffmpeg`, then install the Pi package:
+
+```sh
+brew install ffmpeg
+pi install git:github.com/scriptogre/pi-dictate
+```
+
+Restart Pi and add your Deepgram API key:
 
 ```text
 /login deepgram
 ```
 
-Hold `Ctrl+Alt+D` to record. Release it to place the transcript in Pi's editor.
+Pi stores the key through its standard credential flow. Allow microphone access when macOS asks.
 
-Pi stores the API key in `~/.pi/agent/auth.json` using its standard credential flow.
+## Dictate
 
-## Settings
+Hold `Ctrl+Alt+D` while speaking. Words appear in Pi's editor as you talk.
 
-Add optional settings under `dictate` in `~/.pi/agent/settings.json`:
+## Change the shortcut or language
+
+Create `~/.pi/agent/pi-dictate.json`, then restart Pi:
 
 ```json
 {
-  "dictate": {
-    "shortcut": "ctrl+alt+d",
-    "language": "en"
-  }
+  "shortcut": "ctrl+alt+d",
+  "language": "en"
 }
 ```
 
-Restart Pi after changing these settings.
+## Why pi-dictate?
+
+[pi-listen](https://github.com/codexstar69/pi-listen) supports a broader set of voice features. pi-dictate is a much smaller option for people who only need Deepgram push-to-talk.
