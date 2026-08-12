@@ -31,6 +31,7 @@ export default function (pi: ExtensionAPI) {
 	let editorAfter = "";
 	let started = 0;
 	let pressed = false;
+	let retry = true;
 	let statusTimer: ReturnType<typeof setInterval> | undefined;
 	let releaseTimer: ReturnType<typeof setTimeout> | undefined;
 	let unsubscribe: (() => void) | undefined;
@@ -90,7 +91,7 @@ export default function (pi: ExtensionAPI) {
 			headers: { Authorization: `Token ${key}` },
 		} as any);
 		setTimeout(() => { if (socket === ws && ws.readyState !== WebSocket.OPEN) finish("Deepgram connection timed out"); }, 10_000).unref();
-		ws.onopen = () => { for (const chunk of audio) ws.send(chunk); audio = []; };
+		ws.onopen = () => { retry = false; for (const chunk of audio) ws.send(chunk); audio = []; if (!pressed) ws.send(JSON.stringify({ type: "CloseStream" })); };
 		ws.onmessage = event => {
 			const message = JSON.parse(String(event.data));
 			if (message.type === "Error") return finish(message.message || "Deepgram error");
@@ -98,7 +99,10 @@ export default function (pi: ExtensionAPI) {
 			if (message.is_final && text) finals.push(text);
 			ctx?.ui.setEditorText(editorBefore + [...finals, message.is_final ? "" : text].filter(Boolean).join(" ") + editorAfter);
 		};
-		ws.onerror = () => { if (socket === ws) finish("Deepgram connection failed"); };
+		ws.onerror = () => {
+			if (socket === ws && pressed && retry) { retry = false; socket = undefined; ws.close(); return queue(connect); }
+			if (socket === ws) finish("Deepgram connection failed");
+		};
 		ws.onclose = () => { if (socket === ws) finish(); };
 	}
 
@@ -125,6 +129,7 @@ export default function (pi: ExtensionAPI) {
 			if (pressed || socket) return;
 			ctx = handlerCtx;
 			pressed = true;
+			retry = true;
 			ctx.ui.pasteToEditor(cursorMarker);
 			[editorBefore, editorAfter = ""] = ctx.ui.getEditorText().split(cursorMarker);
 			started = Date.now();

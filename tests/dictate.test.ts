@@ -104,6 +104,30 @@ describe("dictation", () => {
 		expect(app.editor()).toBe("before\n\nhello world\nafter");
 	});
 
+	test("closes a short recording after the connection opens", async () => {
+		const app = setup();
+		app.shortcut.handler(app.ctx);
+		app.input("\x1b[100;7:3u");
+		await settle();
+
+		const socket = sockets[0]!;
+		socket.open();
+		expect(socket.sent).toContain(JSON.stringify({ type: "CloseStream" }));
+	});
+
+	test("retries one failed connection", async () => {
+		const app = setup();
+		app.shortcut.handler(app.ctx);
+		await settle();
+		sockets[0]!.onerror?.();
+		await settle();
+
+		expect(sockets).toHaveLength(2);
+		expect(app.ctx.ui.notify).not.toHaveBeenCalled();
+		sockets[1]!.onerror?.();
+		expect(app.ctx.ui.notify).toHaveBeenCalledWith("Deepgram connection failed", "error");
+	});
+
 	test("cleans up when auth is missing", async () => {
 		const app = setup(null);
 		app.shortcut.handler(app.ctx);
