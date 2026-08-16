@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,8 +15,15 @@ class Emitter {
 }
 
 let microphone: Emitter & { stdout: Emitter; kill: ReturnType<typeof mock> };
+let microphoneArgs: string[] = [];
 const childProcess = await import("node:child_process");
-mock.module("node:child_process", () => ({ ...childProcess, spawn: () => microphone }));
+mock.module("node:child_process", () => ({
+	...childProcess,
+	spawn: (_command: string, args: string[]) => {
+		microphoneArgs = args;
+		return microphone;
+	},
+}));
 
 const sockets: FakeSocket[] = [];
 class FakeSocket {
@@ -37,6 +44,7 @@ globalThis.WebSocket = FakeSocket as any;
 const agentDir = mkdtempSync(join(tmpdir(), "pi-dictate-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = agentDir;
+writeFileSync(join(agentDir, "pi-dictate.json"), JSON.stringify({ inputDevice: "Test Microphone" }));
 const { default: dictate } = await import("../extensions/dictate");
 afterAll(() => {
 	if (previousAgentDir) process.env.PI_CODING_AGENT_DIR = previousAgentDir;
@@ -46,6 +54,7 @@ afterAll(() => {
 
 beforeEach(() => {
 	sockets.length = 0;
+	microphoneArgs = [];
 	microphone = Object.assign(new Emitter(), { stdout: new Emitter(), kill: mock() });
 });
 
@@ -82,6 +91,8 @@ describe("dictation", () => {
 	test("buffers audio, streams at the cursor, and finalizes after release", async () => {
 		const app = setup();
 		app.shortcut.handler(app.ctx);
+		let inputIndex = microphoneArgs.indexOf("-i");
+		expect(microphoneArgs.slice(inputIndex, inputIndex + 2)).toEqual(["-i", ":Test Microphone"]);
 		expect(app.ctx.ui.setStatus).toHaveBeenCalledWith("dictate", "● REC 0.0s");
 		microphone.stdout.emit("data", Buffer.from([1, 2]));
 		await settle();

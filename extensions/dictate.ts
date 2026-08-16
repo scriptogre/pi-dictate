@@ -7,10 +7,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const agentDir = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi/agent");
-let config: { shortcut?: string; language?: string } = {};
+let config: { shortcut?: string; language?: string; inputDevice?: string } = {};
 try { config = JSON.parse(readFileSync(join(agentDir, "pi-dictate.json"), "utf8")); } catch {}
 const shortcut = config.shortcut || "ctrl+alt+d";
 const language = config.language || "en";
+const inputDevice = config.inputDevice || "default";
 const bareKey = (key: string) => key.replace(/^(?:(?:ctrl|shift|alt|super|meta|cmd)\+)+/, "");
 const keyName = bareKey(shortcut);
 const cursorMarker = "\u2060";
@@ -68,7 +69,7 @@ export default function (pi: ExtensionAPI) {
 	function capture() {
 		audio = [];
 		mic = spawn("ffmpeg", [
-			"-f", "avfoundation", "-i", ":default", "-ac", "1", "-ar", "16000",
+			"-f", "avfoundation", "-i", `:${inputDevice}`, "-ac", "1", "-ar", "16000",
 			"-sample_fmt", "s16", "-f", "s16le", "-loglevel", "error", "pipe:1",
 		], { stdio: ["ignore", "pipe", "ignore"] });
 		mic.stdout?.on("data", chunk => socket?.readyState === WebSocket.OPEN ? socket.send(chunk) : audio.push(chunk));

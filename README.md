@@ -39,8 +39,15 @@ Create `~/.pi/agent/pi-dictate.json`, then restart Pi.
 ```json
 {
   "shortcut": "ctrl+alt+d",
-  "language": "en"
+  "language": "en",
+  "inputDevice": "MacBook Pro Microphone"
 }
+```
+
+Omit `inputDevice` to use the system default. List available macOS device labels with:
+
+```sh
+ffmpeg -f avfoundation -list_devices true -i ''
 ```
 
 ## Need more voice features?
