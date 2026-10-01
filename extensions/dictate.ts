@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { createProvider, envApiKeyAuth, type ProviderStreams } from "@earendil-works/pi-ai";
+import { createProvider, envApiKeyAuth } from "@earendil-works/pi-ai";
 import { isKeyRelease, matchesKey, parseKey, type KeyId } from "@earendil-works/pi-tui";
 import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -15,12 +15,13 @@ const inputDevice = config.inputDevice || "default";
 const bareKey = (key: string) => key.replace(/^(?:(?:ctrl|shift|alt|super|meta|cmd)\+)+/, "");
 const keyName = bareKey(shortcut);
 const cursorMarker = "\u2060";
+const unsupportedStream = () => { throw new Error("Deepgram provides dictation, not chat models"); };
 
 export default function (pi: ExtensionAPI) {
 	pi.registerProvider(createProvider({
 		id: "deepgram", name: "Deepgram", baseUrl: "https://api.deepgram.com",
 		auth: { apiKey: envApiKeyAuth("Deepgram API key", ["DEEPGRAM_API_KEY"]) },
-		models: [], api: {} as ProviderStreams,
+		models: [], api: { stream: unsupportedStream, streamSimple: unsupportedStream },
 	}));
 
 	let ctx: ExtensionContext | undefined;
