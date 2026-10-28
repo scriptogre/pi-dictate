@@ -15,11 +15,13 @@ class Emitter {
 }
 
 let microphone: Emitter & { stdout: Emitter; kill: ReturnType<typeof mock> };
+let microphoneCommand = "";
 let microphoneArgs: string[] = [];
 const childProcess = await import("node:child_process");
 mock.module("node:child_process", () => ({
 	...childProcess,
-	spawn: (_command: string, args: string[]) => {
+	spawn: (command: string, args: string[]) => {
+		microphoneCommand = command;
 		microphoneArgs = args;
 		return microphone;
 	},
@@ -88,6 +90,12 @@ function setup(auth: unknown = { auth: { apiKey: "test-key" } }) {
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe("dictation", () => {
+	test("records with ffmpeg by default", () => {
+		const app = setup();
+		app.shortcut.handler(app.ctx);
+		expect(microphoneCommand).toBe("ffmpeg");
+	});
+
 	test("buffers audio, streams at the cursor, and finalizes after release", async () => {
 		const app = setup();
 		app.shortcut.handler(app.ctx);

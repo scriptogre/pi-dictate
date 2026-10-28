@@ -44,6 +44,8 @@ Create `~/.pi/agent/pi-dictate.json`, then restart Pi.
 }
 ```
 
+Set `captureCommand` to any command that writes 16 kHz mono s16le PCM to stdout, for example a microphone served over SSH. It replaces the ffmpeg capture.
+
 Omit `inputDevice` to use the system default. List available macOS device labels with:
 
 ```sh
