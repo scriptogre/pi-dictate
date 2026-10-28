@@ -1,22 +1,20 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createProvider, envApiKeyAuth } from "@earendil-works/pi-ai";
 import { isKeyRelease, matchesKey, parseKey, type KeyId } from "@earendil-works/pi-tui";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { connect as connectTcp } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 const agentDir = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi/agent");
-let config: { shortcut?: string; language?: string; inputDevice?: string; captureCommand?: string[] } = {};
+let config: { shortcut?: string; language?: string; inputDevice?: string } = {};
 try { config = JSON.parse(readFileSync(join(agentDir, "pi-dictate.json"), "utf8")); } catch {}
 const shortcut = config.shortcut || "ctrl+alt+d";
 const language = config.language || "en";
 const inputDevice = config.inputDevice || "default";
-// Any command that writes 16 kHz mono s16le PCM to stdout, e.g. a remote microphone.
-const captureCommand = config.captureCommand?.length ? config.captureCommand : [
-	"ffmpeg", "-f", "avfoundation", "-i", `:${inputDevice}`, "-ac", "1", "-ar", "16000",
-	"-sample_fmt", "s16", "-f", "s16le", "-loglevel", "error", "pipe:1",
-];
+// A local TCP port serving 16 kHz mono s16le PCM, e.g. a microphone tunneled over SSH.
+const micPort = Number(process.env.PI_DICTATE_PORT) || 0;
 const bareKey = (key: string) => key.replace(/^(?:(?:ctrl|shift|alt|super|meta|cmd)\+)+/, "");
 const keyName = bareKey(shortcut);
 const cursorMarker = "\u2060";
@@ -30,7 +28,7 @@ export default function (pi: ExtensionAPI) {
 	}));
 
 	let ctx: ExtensionContext | undefined;
-	let mic: ChildProcess | undefined;
+	let mic: { kill(signal?: NodeJS.Signals): unknown } | undefined;
 	let socket: WebSocket | undefined;
 	let audio: Buffer[] = [];
 	let finals: string[] = [];
@@ -74,11 +72,23 @@ export default function (pi: ExtensionAPI) {
 
 	function capture() {
 		audio = [];
-		mic = spawn(captureCommand[0]!, captureCommand.slice(1), { stdio: ["ignore", "pipe", "ignore"] });
-		mic.stdout?.on("data", chunk => socket?.readyState === WebSocket.OPEN ? socket.send(chunk) : audio.push(chunk));
-		mic.on("error", error => finish(`Microphone failed: ${error.message}`));
-		const child = mic;
-		mic.on("exit", code => { if (mic === child && pressed) finish(`Microphone stopped${code ? ` (${code})` : ""}`); });
+		const onData = (chunk: Buffer) => socket?.readyState === WebSocket.OPEN ? socket.send(chunk) : audio.push(chunk);
+		const onError = (error: Error) => finish(`Microphone failed: ${error.message}`);
+		if (micPort) {
+			const stream = connectTcp(micPort, "127.0.0.1");
+			const source = mic = { kill: () => stream.destroy() };
+			stream.on("data", onData).on("error", onError);
+			stream.on("close", () => { if (mic === source && pressed) finish("Microphone stopped"); });
+			return;
+		}
+		const child = spawn("ffmpeg", [
+			"-f", "avfoundation", "-i", `:${inputDevice}`, "-ac", "1", "-ar", "16000",
+			"-sample_fmt", "s16", "-f", "s16le", "-loglevel", "error", "pipe:1",
+		], { stdio: ["ignore", "pipe", "ignore"] });
+		mic = child;
+		child.stdout?.on("data", onData);
+		child.on("error", onError);
+		child.on("exit", code => { if (mic === child && pressed) finish(`Microphone stopped${code ? ` (${code})` : ""}`); });
 	}
 
 	async function connect() {
