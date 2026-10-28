@@ -8,13 +8,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const agentDir = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi/agent");
-let config: { shortcut?: string; language?: string; inputDevice?: string } = {};
+let config: { shortcut?: string; language?: string; inputDevice?: string; port?: number } = {};
 try { config = JSON.parse(readFileSync(join(agentDir, "pi-dictate.json"), "utf8")); } catch {}
 const shortcut = config.shortcut || "ctrl+alt+d";
 const language = config.language || "en";
 const inputDevice = config.inputDevice || "default";
 // A local TCP port serving 16 kHz mono s16le PCM, e.g. a microphone tunneled over SSH.
-const micPort = Number(process.env.PI_DICTATE_PORT) || 0;
+const micPort = config.port || 0;
 const bareKey = (key: string) => key.replace(/^(?:(?:ctrl|shift|alt|super|meta|cmd)\+)+/, "");
 const keyName = bareKey(shortcut);
 const cursorMarker = "\u2060";

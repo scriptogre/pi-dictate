@@ -44,7 +44,7 @@ Create `~/.pi/agent/pi-dictate.json`, then restart Pi.
 }
 ```
 
-Set `PI_DICTATE_PORT` to a local TCP port serving 16 kHz mono s16le PCM, for example a microphone tunneled over SSH, and Pi reads audio from it instead of running ffmpeg.
+Set `port` to a local TCP port serving 16 kHz mono s16le PCM, for example a microphone tunneled over SSH, and Pi reads audio from it instead of running ffmpeg.
 
 Omit `inputDevice` to use the system default. List available macOS device labels with:
 
